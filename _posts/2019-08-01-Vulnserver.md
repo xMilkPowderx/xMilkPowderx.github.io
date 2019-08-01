@@ -8,14 +8,17 @@ comments: true
 So one day, I was preparing for OSCE, I fire up vulnserver and try to mess around with one of their vulnerable command, LTER that I discovered by spike. Little did I know, this one is much harder than I thought.
 
 <img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-1.png"/>
+
 When the POC crash, we can see that EIP is not overwritten, however, if we look at the SEH chain, we can find that it got overwritten to our payload. So, this is going to be a SEH buffer overflow.
 
 We use pattern create and !mona findmsp to get the location of nSEH and SEH
-<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/SLAE/LTER-2.png"/>
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-2.png"/>
+
 nSEH at 3515 and SEH at 3519, looks good. However, we only get 52 bytes after that, which clearly is not enough for a reverse shell. Looks like a job for egghunter?
 
 With the help of !mona seh, we get the address for a pop pop retn instruction.
-<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/SLAE/LTER-3.png"/>
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-3.png"/>
+
 Here, I choose 0x6250120B which I got lucky here, you will know why later.
 
 Then, I add a jmp short to jump over the address after the redirection to nSEH and here's where the nightmare began. 
@@ -36,14 +39,17 @@ s.recv(1024)
 s.send(string)
 s.close()
 ```
-<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/SLAE/LTER-4.png"/>
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-4.png"/>
+
 See where our short jump should be? \xEB got converted to \x6C and \x90 got converted to \x11. Since like both of them are bad characters. That's not a big deal, I can use a conditional jump instead.
 
-<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/SLAE/LTER-5.png"/>
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-5.png"/>
+
 Here I use \x77 to make a conditional jump when both CF and ZF are equal 0. The jump is working quite well. Before we put our shellcode inside, lets check for bad characters.
 
 We all knew that \xEB and \x90 are bad characters, how about the others? The truth is...
-<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/SLAE/LTER-6.png"/>
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-6.png"/>
+
 The truth is every single bytes after \x7F got converted and we cannot use them. Not even our egghunter cause after we encode it, the size will be larger that the space we have. We will need to find some way to get more space. 
 
 How about we jump to the middle of our payload? it's possible but we can't just put \xFF in our payload and make the jump. To solve this problem, we will redirect where our ESP is pointing at and use push to push the shellcode we need. Which result in these shellcode.
@@ -71,12 +77,14 @@ s.recv(1024)
 s.send(string)
 s.close()
 ```
-<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/SLAE/LTER-7.png"/>
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-7.png"/>
+
 The first jump will redirect ESP to the end of the payload so that we can write some shellcode at the end. The distance between ESP and the end of the payload is around 0x1379 so we use eax to do the calculation and ebx to store the original value of esp.
 
 P.S. you do not need the PUSHAD, I am just lazy to recalculate all the stuff to align ESP. just minus 32 bytes if you want to get rid of the PUSHAD
-<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/SLAE/LTER-8.png"/>
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-8.png"/>
+
 This jump help us to create more space so that we can make a further jump to our shellcode.
 
 The second jump looks like this
-<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/SLAE/LTER-9.png"/>
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-9.png"/>
