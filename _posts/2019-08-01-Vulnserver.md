@@ -12,11 +12,13 @@ So one day, I was preparing for OSCE, I fire up vulnserver and try to mess aroun
 When the POC crash, we can see that EIP is not overwritten, however, if we look at the SEH chain, we can find that it got overwritten to our payload. So, this is going to be a SEH buffer overflow.
 
 We use pattern create and !mona findmsp to get the location of nSEH and SEH
+
 <img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-2.png"/>
 
 nSEH at 3515 and SEH at 3519, looks good. However, we only get 52 bytes after that, which clearly is not enough for a reverse shell. Looks like a job for egghunter?
 
 With the help of !mona seh, we get the address for a pop pop retn instruction.
+
 <img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-3.png"/>
 
 Here, I choose 0x6250120B which I got lucky here, you will know why later.
@@ -48,6 +50,7 @@ See where our short jump should be? \xEB got converted to \x6C and \x90 got conv
 Here I use \x77 to make a conditional jump when both CF and ZF are equal 0. The jump is working quite well. Before we put our shellcode inside, lets check for bad characters.
 
 We all knew that \xEB and \x90 are bad characters, how about the others? The truth is...
+
 <img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-6.png"/>
 
 The truth is every single bytes after \x7F got converted and we cannot use them. Not even our egghunter cause after we encode it, the size will be larger that the space we have. We will need to find some way to get more space. 
@@ -82,9 +85,11 @@ s.close()
 The first jump will redirect ESP to the end of the payload so that we can write some shellcode at the end. The distance between ESP and the end of the payload is around 0x1379 so we use eax to do the calculation and ebx to store the original value of esp.
 
 P.S. you do not need the PUSHAD, I am just lazy to recalculate all the stuff to align ESP. just minus 32 bytes if you want to get rid of the PUSHAD
+
 <img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-8.png"/>
 
 This jump help us to create more space so that we can make a further jump to our shellcode.
 
-The second jump looks like this
+The second jump looks like this.
+
 <img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-9.png"/>
